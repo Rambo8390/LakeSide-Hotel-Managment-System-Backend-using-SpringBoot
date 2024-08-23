@@ -29,47 +29,30 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
     @Autowired
     private HotelUserDetailsService userDetailsService;
-
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        try {
+        try{
             String jwt = parseJwt(request);
-            logger.info("JWT Token: {}", jwt);  // Log the extracted JWT for debugging
-
-            if (jwt != null && jwtUtils.validateToken(jwt)) {
+            if (jwt != null && jwtUtils.validateToken(jwt)){
                 String email = jwtUtils.getUserNameFromToken(jwt);
-                logger.info("Email from JWT: {}", email);  // Log the email extracted from the JWT
-
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-
-                if (userDetails != null) {  // Ensure userDetails is not null
-                    var authentication =
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    logger.info("User authentication set in SecurityContextHolder for user: {}", email);
-                } else {
-                    logger.error("User details not found for email: {}", email);
-                }
-            } else {
-                logger.warn("JWT token is null or invalid.");
+                var authentication =
+                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
-        } catch (Exception e) {
-            logger.error("Cannot set user authentication: {} ", e.getMessage());
+        }catch (Exception e){
+            logger.error("Cannot set user authentication : {} ", e.getMessage());
         }
-
         filterChain.doFilter(request, response);
     }
 
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
-        logger.info("Authorization Header: {}", headerAuth);  // Log the authorization header for debugging
-
-        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
+        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")){
             return headerAuth.substring(7);
         }
         return null;
