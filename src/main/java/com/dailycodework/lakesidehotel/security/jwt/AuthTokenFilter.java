@@ -29,52 +29,47 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
     @Autowired
     private HotelUserDetailsService userDetailsService;
+
     private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
+
     @Override
-protected void doFilterInternal(HttpServletRequest request,
-                                HttpServletResponse response,
-                                FilterChain filterChain) throws ServletException, IOException {
-    try {
-        // Extract request URI to check if it is a public endpoint
-        String requestURI = request.getRequestURI();
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        try {
+            String jwt = parseJwt(request);
+            logger.info("JWT Token: {}", jwt);  // Log the extracted JWT for debugging
 
-        // Allow public endpoints without JWT validation
-        if (isPublicEndpoint(requestURI)) {
-            filterChain.doFilter(request, response);
-            return;
+            if (jwt != null && jwtUtils.validateToken(jwt)) {
+                String email = jwtUtils.getUserNameFromToken(jwt);
+                logger.info("Email from JWT: {}", email);  // Log the email extracted from the JWT
+
+                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+
+                if (userDetails != null) {  // Ensure userDetails is not null
+                    var authentication =
+                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    logger.info("User authentication set in SecurityContextHolder for user: {}", email);
+                } else {
+                    logger.error("User details not found for email: {}", email);
+                }
+            } else {
+                logger.warn("JWT token is null or invalid.");
+            }
+        } catch (Exception e) {
+            logger.error("Cannot set user authentication: {} ", e.getMessage());
         }
 
-        // Proceed with JWT validation and authentication for protected endpoints
-        String jwt = parseJwt(request);
-        if (jwt != null && jwtUtils.validateToken(jwt)) {
-            String email = jwtUtils.getUserNameFromToken(jwt);
-            UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-        }
-    } catch (Exception e) {
-        logger.error("Cannot set user authentication: {}", e.getMessage());
+        filterChain.doFilter(request, response);
     }
-
-    filterChain.doFilter(request, response);
-}
-
-/**
- * Checks if the request URI matches any public endpoint patterns.
- */
-private boolean isPublicEndpoint(String requestURI) {
-    // Add your public endpoints patterns here
-    return requestURI.startsWith("/auth") ||
-           requestURI.startsWith("/rooms") ||
-           requestURI.startsWith("/bookings");
-}
 
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
-        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")){
+        logger.info("Authorization Header: {}", headerAuth);  // Log the authorization header for debugging
+
+        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
             return headerAuth.substring(7);
         }
         return null;
